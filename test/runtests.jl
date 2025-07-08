@@ -3,6 +3,31 @@
 using GMime
 using Test, Dates
 
+function gen_email_string(date::String, Z::String, z::String)
+    return """MIME-Version: 1.0
+       Date: $date $Z $z 
+       Message-ID: <CAOU+8LMfxVaPMmigMQE2qTBLSbNdKQVps=Fi0S3X8LnfxT2xee@mail.email.com>
+       Subject: Test Message
+       From: Test User <username@example.com>
+       To: Test User <username@example.com>
+       Content-Type: multipart/alternative; boundary="000000000000dd23a50621ff39e8"
+
+       --000000000000dd23a50621ff39e8
+       Content-Type: text/plain; charset="UTF-8"
+
+       Hello World!
+
+       Best regards,
+       Test User
+
+       --000000000000dd23a50621ff39e8
+       Content-Type: text/html; charset="UTF-8"
+
+       <div dir="ltr">Hello World!<div><br></div><div>Best regards,</div><div>Test User</div></div>
+
+       --000000000000dd23a50621ff39e8--"""
+end
+
 @testset "Parse Email" begin
     @testset "Case №1: simple email" begin
         data = read("emails/simple.eml")
@@ -10,7 +35,7 @@ using Test, Dates
 
         @test email.from == ["Test User <username@example.com>"]
         @test email.to == ["Test User <username@example.com>"]
-        @test email.date == DateTime("1996-03-05 11:00:00", DateFormat("yyyy-mm-dd HH:MM:SS"))
+        @test email.date == DateTime("1996-03-05 08:00:00", DateFormat("yyyy-mm-dd HH:MM:SS"))
         @test !isempty(email.text_body)
         @test isempty(email.attachments)
     end
@@ -21,7 +46,7 @@ using Test, Dates
 
         @test email.from == ["Test User <username@example.com>"]
         @test email.to == ["Test User <username@example.com>"]
-        @test email.date == DateTime("1996-03-05 11:00:00", DateFormat("yyyy-mm-dd HH:MM:SS"))
+        @test email.date == DateTime("1996-03-05 08:00:00", DateFormat("yyyy-mm-dd HH:MM:SS"))
         @test !isempty(email.text_body)
         @test length(email.attachments) == 5
     end
@@ -43,7 +68,7 @@ using Test, Dates
         
         @test email.from == ["fejj@gnome.org"]
         @test email.to == ["fejj@gnome.org"]
-        @test email.date == DateTime("2002-08-23 02:32:53", DateFormat("yyyy-mm-dd HH:MM:SS"))
+        @test email.date == DateTime("2002-08-23 06:32:53", DateFormat("yyyy-mm-dd HH:MM:SS"))
         @test !isempty(email.text_body)
         @test isempty(email.attachments)
     end
@@ -54,7 +79,7 @@ using Test, Dates
         
         @test email.from == ["nsb"]
         @test length(email.to) == 18
-        @test email.date == DateTime("1991-09-19 12:41:43", DateFormat("yyyy-mm-dd HH:MM:SS"))
+        @test email.date == DateTime("1991-09-19 16:41:43", DateFormat("yyyy-mm-dd HH:MM:SS"))
         @test !isempty(email.text_body)
         @test isempty(email.attachments)
     end
@@ -66,5 +91,34 @@ using Test, Dates
         @test isnothing(email.attachments[1].encoding)
         @test isnothing(email.attachments[1].name)
         @test_nowarn parse_email(read("emails/eml_as_attachment.eml"))
+    end
+
+    @testset "Case №7: Time Zones parsing" begin
+        date = "Thu, 19 Sep 91 12:41:43"
+        format = DateFormat("yyyy-mm-dd HH:MM:SS")
+
+        email_str = gen_email_string(date, "+0300", "(CST)")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 09:41:43", format)
+
+        email_str = gen_email_string(date, "+0300", "(UDP)")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 09:41:43", format)
+
+        email_str = gen_email_string(date, "-0300", "(GDP)")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 15:41:43", format)
+
+        email_str = gen_email_string(date, "(UDP)", "")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 12:41:43", format)
+
+        email_str = gen_email_string(date, "(EDT)", "")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 16:41:43", format)
+
+        email_str = gen_email_string(date, "EDT", "")
+        email = parse_email(email_str)
+        @test email.date == DateTime("1991-09-19 16:41:43", format)
     end
 end

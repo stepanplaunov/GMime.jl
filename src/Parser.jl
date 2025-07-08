@@ -96,7 +96,8 @@ end
 function extract_date(msg::Ptr{GMimeMessage})
     date = g_mime_message_get_date(msg)
     date == C_NULL && return nothing
-    date_str_ptr = g_date_time_format(date, "%Y-%m-%d %H:%M:%S")
+    utc_dt = g_date_time_to_utc(date)
+    date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
     try
         DateTime(unsafe_string(date_str_ptr), DATE_FORMAT)
     finally

@@ -143,6 +143,7 @@ export g_mime_content_encoding_to_string
 
 export g_object_unref,
     g_date_time_format,
+    g_date_time_to_utc,
     g_free
 
 export EmailAttachment,
@@ -612,6 +613,10 @@ end
 
 function g_date_time_format(datetime, format)
     return ccall((:g_date_time_format, libgmime), Ptr{UInt8}, (Ptr{GDateTime}, Ptr{UInt8}), datetime, format)
+end
+
+function g_date_time_to_utc(datetime)
+    return ccall((:g_date_time_to_utc, libgmime), Ptr{GDateTime}, (Ptr{GDateTime},), datetime)
 end
 
 function g_free(ptr)

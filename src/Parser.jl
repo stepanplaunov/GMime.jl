@@ -39,6 +39,66 @@ function Base.show(io::IO, a::EmailAttachment)
     println(io, "   📏 Size: $(length(a.body)) bytes")
 end
 
+struct HeaderList
+    ptr::Ptr{GMimeHeaderList}
+end
+
+function headers(mime::Ptr{GMimeObject})
+    headers = g_mime_object_get_header_list(mime)
+    headers == C_NULL && throw(GMimeError("Failed to get headers list."))
+    return HeaderList(headers)
+end
+
+function headers(message::Ptr{GMimeMessage})
+    headers = g_mime_object_get_header_list(message)
+    headers == C_NULL && throw(GMimeError("Failed to get headers list."))
+    return HeaderList(headers)
+end
+
+function Base.getindex(x::HeaderList, header_name::String)
+    ptr = g_mime_header_list_get_header(x.ptr, pointer(header_name))
+    ptr == C_NULL && throw(GMimeError("Failed to get index $index from HeaderList."))
+    return header(ptr)
+end
+
+function Base.getindex(x::HeaderList, index::Int64)
+    ptr = g_mime_header_list_get_header_at(x.ptr, index - 1)
+    ptr == C_NULL && throw(GMimeError("Failed to get index $index from HeaderList."))
+    return header(ptr)
+end
+
+function Base.length(x::HeaderList)
+    return g_mime_header_list_get_count(x.ptr)
+end
+
+function Base.findfirst(header_name::String, x::HeaderList)
+    n = length(x)
+    for i in 1:n
+        header = x[i]
+        header.name == header_name && return header
+    end
+    return nothing
+end
+
+struct Header
+    ptr::Ptr{GMimeHeader}
+    name::String
+    value::String
+end
+
+function Base.show(io::IO, h::Header)
+    println(io, "Header(\"$(h.name)\", \"$(h.value)\")")
+end
+
+function header(ptr::Ptr{GMimeHeader})
+    name = g_mime_header_get_name(ptr)
+    value = g_mime_header_get_value(ptr)
+    if value == C_NULL || name == C_NULL
+        throw(GMimeError("Failed to get headers list."))
+    end
+    return Header(ptr, unsafe_string(name), unsafe_string(value))
+end
+
 """
     Email
 
@@ -48,6 +108,7 @@ Email structure with metadata and attachments.
   - `from::Union{Nothing,Vector{String}}`: Vector of the email sender(s) addresses.
   - `to::Union{Nothing,Vector{String}}`: Vector of the email recipient(s) addresses.
   - `date::Union{Nothing,DateTime}`: The date and time the email was sent.
+  - `recieved::Union{Nothing,DateTime}`: The date and time the email was recieved.
   - `text_body::Vector{UInt8}`: Binary data of the email's text body.
   - `attachments::Vector{EmailAttachment}`: Vector of the email attachments with metadata.
 """
@@ -55,6 +116,7 @@ struct Email
     from::Union{Nothing,Vector{String}}
     to::Union{Nothing,Vector{String}}
     date::Union{Nothing,DateTime}
+    recieved::Union{Nothing,DateTime}
     text_body::Vector{UInt8}
     attachments::Vector{EmailAttachment}
 end
@@ -64,6 +126,9 @@ function Base.show(io::IO, m::Email)
     println(io, "   📤 From: $(join(m.from, ", "))")
     println(io, "   📥 To: $(join(m.to, ", "))")
     println(io, "   🕒 Date: $(m.date)")
+    if !isnothing(m.received)
+        println(io, "   🕒 Recieved: $(m.recieved)")
+    end
     println(io, "   📝 Text size: $(length(m.text_body)) bytes")
 
     if !isempty(m.attachments)
@@ -96,8 +161,28 @@ end
 function extract_date(msg::Ptr{GMimeMessage})
     date = g_mime_message_get_date(msg)
     date == C_NULL && return nothing
-    date_str_ptr = g_date_time_format(date, "%Y-%m-%d %H:%M:%S")
+    utc_dt = g_date_time_to_utc(date)
+    date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
     try
+        DateTime(unsafe_string(date_str_ptr), DATE_FORMAT)
+    finally
+        g_free(date_str_ptr)
+    end
+end
+
+function extract_recieved(hs::HeaderList; options=g_mime_format_options_get_default())
+    # first Received point to last server (destination)
+    recieved = findfirst("Received", hs)
+    isnothing(recieved) && return nothing
+    
+    charset = ""
+    value = g_mime_header_format_received(recieved.ptr, options, pointer(recieved.value), pointer(charset))
+    recieved_date_str = split(unsafe_string(value), ";")[end]
+
+    date = g_mime_utils_header_decode_date(pointer(recieved_date_str))
+    utc_dt = g_date_time_to_utc(date)
+    date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
+    return try
         DateTime(unsafe_string(date_str_ptr), DATE_FORMAT)
     finally
         g_free(date_str_ptr)
@@ -298,12 +383,14 @@ function parse_email(data::AbstractVector{UInt8})
     g_object_unref(stream)
     message = parse_message(parser)
     g_object_unref(parser)
+    headers = headers(message)
     email = Email(
         extract_addresses(message, GMIME_ADDRESS_TYPE_FROM),
         extract_addresses(message, GMIME_ADDRESS_TYPE_TO),
         extract_date(message),
+        extract_recieved(headers),
         extract_text_body(message),
-        extract_attachments(message)
+        extract_attachments(message),
     )
     g_object_unref(message)
     return email

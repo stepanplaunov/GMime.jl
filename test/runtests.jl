@@ -130,7 +130,7 @@ end
         email = parse_email(email_str)
         @test email.date == DateTime("1991-09-19 16:41:43", format)
     end
-
+    
     @testset "Case №8: Headers" begin
         date = "Thu, 19 Sep 91 12:41:43"
         format = DateFormat("yyyy-mm-dd HH:MM:SS")

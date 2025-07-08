@@ -383,12 +383,12 @@ function parse_email(data::AbstractVector{UInt8})
     g_object_unref(stream)
     message = parse_message(parser)
     g_object_unref(parser)
-    headers = headers(message)
+    hds = headers(message)
     email = Email(
         extract_addresses(message, GMIME_ADDRESS_TYPE_FROM),
         extract_addresses(message, GMIME_ADDRESS_TYPE_TO),
         extract_date(message),
-        extract_recieved(headers),
+        extract_recieved(hds),
         extract_text_body(message),
         extract_attachments(message),
     )

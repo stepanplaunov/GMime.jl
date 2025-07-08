@@ -1,9 +1,10 @@
 name = "GMime"
 uuid = "158299e7-fc4f-4c3e-9fda-ad8bb0e07f1e"
-version = "1.1.0"
+version = "1.2.0"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 gmime_jll = "84a963f3-210d-52bd-a31c-8c93a6d2cb5c"
 
 [compat]

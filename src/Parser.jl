@@ -5,6 +5,7 @@ export EmailAttachment,
     parse_email
 
 using Dates
+using TimeZones
 using ..GMime
 
 const DATE_FORMAT = DateFormat("yyyy-mm-dd HH:MM:SS")
@@ -54,7 +55,7 @@ Email structure with metadata and attachments.
 struct Email
     from::Union{Nothing,Vector{String}}
     to::Union{Nothing,Vector{String}}
-    date::Union{Nothing,DateTime}
+    date::Union{Nothing,ZonedDateTime}
     text_body::Vector{UInt8}
     attachments::Vector{EmailAttachment}
 end
@@ -96,9 +97,10 @@ end
 function extract_date(msg::Ptr{GMimeMessage})
     date = g_mime_message_get_date(msg)
     date == C_NULL && return nothing
-    date_str_ptr = g_date_time_format(date, "%Y-%m-%d %H:%M:%S")
+    date_str_ptr = g_date_time_format(date, "%Y-%m-%d %H:%M:%S %z")
     try
-        DateTime(unsafe_string(date_str_ptr), DATE_FORMAT)
+        date_str = unsafe_string(date_str_ptr)
+        return ZonedDateTime(date_str, dateformat"yyyy-mm-dd HH:MM:SS z")
     finally
         g_free(date_str_ptr)
     end

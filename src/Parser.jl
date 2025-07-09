@@ -177,9 +177,12 @@ function extract_recieved(hs::HeaderList; options=g_mime_format_options_get_defa
     
     charset = ""
     value = g_mime_header_format_received(recieved.ptr, options, pointer(recieved.value), pointer(charset))
+    value == C_NULL && return nothing
     recieved_date_str = split(unsafe_string(value), ";")[end]
 
     date = g_mime_utils_header_decode_date(pointer(recieved_date_str))
+    date == C_NULL && return nothing
+    
     utc_dt = g_date_time_to_utc(date)
     date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
     return try

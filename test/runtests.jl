@@ -141,5 +141,6 @@ end
 
         @test email.date == DateTime("1991-09-19 09:41:43", format)
         @test email.received == [DateTime("1991-09-19 08:41:43", format), DateTime("1991-09-19 08:41:43", format)]
+        Base.show(stdout, email)
     end
 end

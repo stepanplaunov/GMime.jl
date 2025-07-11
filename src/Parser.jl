@@ -141,7 +141,7 @@ function Base.show(io::IO, m::Email)
     println(io, "   📥 To: $(join(m.to, ", "))")
     println(io, "   🕒 Date: $(m.date)")
     if !isempty(m.received)
-        println(io, "   🕒 Received: $(m.received...)")
+        println(io, "   🕒 Received: $(join(m.received, ", "))")
     end
     println(io, "   📝 Text size: $(length(m.text_body)) bytes")
 

@@ -108,7 +108,7 @@ Email structure with metadata and attachments.
   - `from::Union{Nothing,Vector{String}}`: Vector of the email sender(s) addresses.
   - `to::Union{Nothing,Vector{String}}`: Vector of the email recipient(s) addresses.
   - `date::Union{Nothing,DateTime}`: The date and time the email was sent.
-  - `recieved::Union{Nothing,DateTime}`: The date and time the email was recieved.
+  - `received::Union{Nothing,DateTime}`: The date and time the email was received.
   - `text_body::Vector{UInt8}`: Binary data of the email's text body.
   - `attachments::Vector{EmailAttachment}`: Vector of the email attachments with metadata.
 """
@@ -116,7 +116,7 @@ struct Email
     from::Union{Nothing,Vector{String}}
     to::Union{Nothing,Vector{String}}
     date::Union{Nothing,DateTime}
-    recieved::Union{Nothing,DateTime}
+    received::Union{Nothing,DateTime}
     text_body::Vector{UInt8}
     attachments::Vector{EmailAttachment}
 end
@@ -127,7 +127,7 @@ function Base.show(io::IO, m::Email)
     println(io, "   📥 To: $(join(m.to, ", "))")
     println(io, "   🕒 Date: $(m.date)")
     if !isnothing(m.received)
-        println(io, "   🕒 Recieved: $(m.recieved)")
+        println(io, "   🕒 Received: $(m.received)")
     end
     println(io, "   📝 Text size: $(length(m.text_body)) bytes")
 
@@ -170,17 +170,17 @@ function extract_date(msg::Ptr{GMimeMessage})
     end
 end
 
-function extract_recieved(hs::HeaderList; options=g_mime_format_options_get_default())
+function extract_received(hs::HeaderList; options=g_mime_format_options_get_default())
     # first Received point to last server (destination)
-    recieved = findfirst("Received", hs)
-    isnothing(recieved) && return nothing
+    received = findfirst("Received", hs)
+    isnothing(received) && return nothing
     
     charset = ""
-    value = g_mime_header_format_received(recieved.ptr, options, pointer(recieved.value), pointer(charset))
+    value = g_mime_header_format_received(received.ptr, options, pointer(received.value), pointer(charset))
     value == C_NULL && return nothing
-    recieved_date_str = split(unsafe_string(value), ";")[end]
+    received_date_str = split(unsafe_string(value), ";")[end]
 
-    date = g_mime_utils_header_decode_date(pointer(recieved_date_str))
+    date = g_mime_utils_header_decode_date(pointer(received_date_str))
     date == C_NULL && return nothing
     
     utc_dt = g_date_time_to_utc(date)
@@ -391,7 +391,7 @@ function parse_email(data::AbstractVector{UInt8})
         extract_addresses(message, GMIME_ADDRESS_TYPE_FROM),
         extract_addresses(message, GMIME_ADDRESS_TYPE_TO),
         extract_date(message),
-        extract_recieved(hds),
+        extract_received(hds),
         extract_text_body(message),
         extract_attachments(message),
     )

@@ -140,6 +140,6 @@ end
         email = parse_email(email_str)
 
         @test email.date == DateTime("1991-09-19 09:41:43", format)
-        @test email.recieved == DateTime("1991-09-19 08:41:43", format)
+        @test email.received == DateTime("1991-09-19 08:41:43", format)
     end
 end

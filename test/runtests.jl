@@ -19,7 +19,7 @@ function gen_email_string(
     Subject: Test Message
     From: Test User <username@example.com>
     To: Test User <username@example.com>
-    Content-Type: multipart/alternative; boundary="000000000000dd23a50621ff39e8"
+    $(received)Content-Type: multipart/alternative; boundary="000000000000dd23a50621ff39e8"
 
     --000000000000dd23a50621ff39e8
     Content-Type: text/plain; charset="UTF-8"
@@ -140,6 +140,6 @@ end
         email = parse_email(email_str)
 
         @test email.date == DateTime("1991-09-19 09:41:43", format)
-        @test email.received == DateTime("1991-09-19 08:41:43", format)
+        @test email.received == [DateTime("1991-09-19 08:41:43", format), DateTime("1991-09-19 08:41:43", format)]
     end
 end

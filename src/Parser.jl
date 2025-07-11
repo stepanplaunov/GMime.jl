@@ -39,7 +39,26 @@ function Base.show(io::IO, a::EmailAttachment)
     println(io, "   📏 Size: $(length(a.body)) bytes")
 end
 
-struct HeaderList
+struct Header
+    ptr::Ptr{GMimeHeader}
+    name::String
+    value::String
+end
+
+function Base.show(io::IO, h::Header)
+    println(io, "Header(\"$(h.name)\", \"$(h.value)\")")
+end
+
+function header(ptr::Ptr{GMimeHeader})
+    name = g_mime_header_get_name(ptr)
+    value = g_mime_header_get_value(ptr)
+    if value == C_NULL || name == C_NULL
+        throw(GMimeError("Failed to get headers list."))
+    end
+    return Header(ptr, unsafe_string(name), unsafe_string(value))
+end
+
+struct HeaderList <: AbstractVector{Header}
     ptr::Ptr{GMimeHeaderList}
 end
 
@@ -71,6 +90,10 @@ function Base.length(x::HeaderList)
     return g_mime_header_list_get_count(x.ptr)
 end
 
+function Base.size(x::HeaderList)
+    return (length(x),)
+end
+
 function Base.findfirst(header_name::String, x::HeaderList)
     n = length(x)
     for i in 1:n
@@ -80,23 +103,14 @@ function Base.findfirst(header_name::String, x::HeaderList)
     return nothing
 end
 
-struct Header
-    ptr::Ptr{GMimeHeader}
-    name::String
-    value::String
-end
-
-function Base.show(io::IO, h::Header)
-    println(io, "Header(\"$(h.name)\", \"$(h.value)\")")
-end
-
-function header(ptr::Ptr{GMimeHeader})
-    name = g_mime_header_get_name(ptr)
-    value = g_mime_header_get_value(ptr)
-    if value == C_NULL || name == C_NULL
-        throw(GMimeError("Failed to get headers list."))
+function Base.findall(header_name::String, x::HeaderList)
+    n = length(x)
+    headers = Header[]
+    for i in 1:n
+        header = x[i]
+        header.name == header_name && push!(headers, header)
     end
-    return Header(ptr, unsafe_string(name), unsafe_string(value))
+    return headers
 end
 
 """
@@ -116,7 +130,7 @@ struct Email
     from::Union{Nothing,Vector{String}}
     to::Union{Nothing,Vector{String}}
     date::Union{Nothing,DateTime}
-    received::Union{Nothing,DateTime}
+    received::Vector{DateTime}
     text_body::Vector{UInt8}
     attachments::Vector{EmailAttachment}
 end
@@ -126,8 +140,8 @@ function Base.show(io::IO, m::Email)
     println(io, "   📤 From: $(join(m.from, ", "))")
     println(io, "   📥 To: $(join(m.to, ", "))")
     println(io, "   🕒 Date: $(m.date)")
-    if !isnothing(m.received)
-        println(io, "   🕒 Received: $(m.received)")
+    if !isempty(m.received)
+        println(io, "   🕒 Received: $(m.received...)")
     end
     println(io, "   📝 Text size: $(length(m.text_body)) bytes")
 
@@ -171,25 +185,30 @@ function extract_date(msg::Ptr{GMimeMessage})
 end
 
 function extract_received(hs::HeaderList; options=g_mime_format_options_get_default())
-    # first Received point to last server (destination)
-    received = findfirst("Received", hs)
-    isnothing(received) && return nothing
-    
-    charset = ""
-    value = g_mime_header_format_received(received.ptr, options, pointer(received.value), pointer(charset))
-    value == C_NULL && return nothing
-    received_date_str = split(unsafe_string(value), ";")[end]
+    received_dts = DateTime[]
+    for header in hs
+        if header.name != "Received"
+            continue
+        end
+        charset = ""
+        value = g_mime_header_format_received(header.ptr, options, pointer(header.value), pointer(charset))
+        value == C_NULL && throw(GMimeError("Failed to format value from Received header."))
+        received_date_str = split(unsafe_string(value), ";")[end]
 
-    date = g_mime_utils_header_decode_date(pointer(received_date_str))
-    date == C_NULL && return nothing
+        date = g_mime_utils_header_decode_date(pointer(received_date_str))
+        date == C_NULL && throw(GMimeError("Failed to parse date from Received header value."))
     
-    utc_dt = g_date_time_to_utc(date)
-    date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
-    return try
-        DateTime(unsafe_string(date_str_ptr), DATE_FORMAT)
-    finally
-        g_free(date_str_ptr)
+        utc_dt = g_date_time_to_utc(date)
+        date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
+        try
+            push!(received_dts, DateTime(unsafe_string(date_str_ptr), DATE_FORMAT))
+        catch err
+            throw(GMimeError("Failed to convert Received header date to DateTime: $err."))
+        finally
+            g_free(date_str_ptr)
+        end
     end
+    return received_dts
 end
 
 function read_text_data(content_ptr::Ptr{UInt8})

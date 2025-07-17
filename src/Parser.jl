@@ -122,7 +122,7 @@ Email structure with metadata and attachments.
   - `from::Union{Nothing,Vector{String}}`: Vector of the email sender(s) addresses.
   - `to::Union{Nothing,Vector{String}}`: Vector of the email recipient(s) addresses.
   - `date::Union{Nothing,DateTime}`: The date and time the email was sent.
-  - `received::Union{Nothing,DateTime}`: The date and time the email was received.
+  - `received_at::Union{Nothing,DateTime}`: The date and time the email was received_at.
   - `text_body::Vector{UInt8}`: Binary data of the email's text body.
   - `attachments::Vector{EmailAttachment}`: Vector of the email attachments with metadata.
 """
@@ -130,7 +130,7 @@ struct Email
     from::Union{Nothing,Vector{String}}
     to::Union{Nothing,Vector{String}}
     date::Union{Nothing,DateTime}
-    received::Vector{DateTime}
+    received_at::Vector{DateTime}
     text_body::Vector{UInt8}
     attachments::Vector{EmailAttachment}
 end
@@ -140,8 +140,8 @@ function Base.show(io::IO, m::Email)
     println(io, "   📤 From: $(join(m.from, ", "))")
     println(io, "   📥 To: $(join(m.to, ", "))")
     println(io, "   🕒 Date: $(m.date)")
-    if !isempty(m.received)
-        println(io, "   🕒 Received: $(join(m.received, ", "))")
+    if !isempty(m.received_at)
+        println(io, "   🕒 Received: $(join(m.received_at, ", "))")
     end
     println(io, "   📝 Text size: $(length(m.text_body)) bytes")
 
@@ -184,26 +184,20 @@ function extract_date(msg::Ptr{GMimeMessage})
     end
 end
 
-function extract_received(hs::HeaderList; options=g_mime_format_options_get_default())
+function extract_received_at(hs::HeaderList; options=g_mime_format_options_get_default())
     received_dts = DateTime[]
     for header in hs
-        if header.name != "Received"
-            continue
-        end
+        header.name != "Received" && continue
         charset = ""
         value = g_mime_header_format_received(header.ptr, options, pointer(header.value), pointer(charset))
-        value == C_NULL && throw(GMimeError("Failed to format value from Received header."))
+        value == C_NULL && continue # skip if can't format
         received_date_str = split(unsafe_string(value), ";")[end]
-
         date = g_mime_utils_header_decode_date(pointer(received_date_str))
-        date == C_NULL && throw(GMimeError("Failed to parse date from Received header value."))
-    
+        date == C_NULL && continue
         utc_dt = g_date_time_to_utc(date)
         date_str_ptr = g_date_time_format(utc_dt, "%Y-%m-%d %H:%M:%S")
         try
             push!(received_dts, DateTime(unsafe_string(date_str_ptr), DATE_FORMAT))
-        catch err
-            throw(GMimeError("Failed to convert Received header date to DateTime: $err."))
         finally
             g_free(date_str_ptr)
         end
@@ -410,7 +404,7 @@ function parse_email(data::AbstractVector{UInt8})
         extract_addresses(message, GMIME_ADDRESS_TYPE_FROM),
         extract_addresses(message, GMIME_ADDRESS_TYPE_TO),
         extract_date(message),
-        extract_received(hds),
+        extract_received_at(hds),
         extract_text_body(message),
         extract_attachments(message),
     )
